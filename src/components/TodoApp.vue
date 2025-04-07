@@ -1,49 +1,52 @@
 <template>
-  <div class="app" :class="{ dark: darkMode }">
-    <div class="todo-container">
-      <div class="header">
-        <h1>Vue Todo App</h1>
-        <label class="dark-toggle">
-          <input type="checkbox" v-model="darkMode" />
-          🌙 Dark Mode
-        </label>
-      </div>
-
-      <form @submit.prevent="addTodo">
-        <input
-          v-model="newTodo"
-          type="text"
-          placeholder="What do you need to do?"
-        />
-        <button type="submit">Add</button>
-      </form>
-
-      <div class="filters">
-        <button :class="{ active: filter === 'all' }" @click="filter = 'all'">
-          All
-        </button>
-        <button :class="{ active: filter === 'active' }" @click="filter = 'active'">
-          Active
-        </button>
-        <button :class="{ active: filter === 'completed' }" @click="filter = 'completed'">
-          Completed
-        </button>
-      </div>
-
-      <transition-group name="fade" tag="ul" class="todo-list">
-        <li
-          v-for="(todo, index) in filteredTodos"
-          :key="todo.text + index"
-          :class="{ done: todo.done }"
-        >
-          <span>{{ todo.text }}</span>
-          <div class="actions">
-            <button @click="toggleTodo(index)">✔</button>
-            <button @click="removeTodo(index)">✖</button>
-          </div>
-        </li>
-      </transition-group>
+  <div class="todo-container" :class="{ dark: darkMode }">
+    <div class="header">
+      <h1>Vue Todo App</h1>
+      <label>
+        <input type="checkbox" v-model="darkMode" /> 🌙 Dark Mode
+      </label>
     </div>
+
+    <form @submit.prevent="addTodo">
+      <input v-model="newTodo" placeholder="Enter a task..." />
+      <button>Add</button>
+    </form>
+
+    <div class="filters">
+      <button :class="{ active: filter === 'all' }" @click="filter = 'all'">All</button>
+      <button :class="{ active: filter === 'active' }" @click="filter = 'active'">Active</button>
+      <button :class="{ active: filter === 'completed' }" @click="filter = 'completed'">Completed</button>
+    </div>
+
+    <transition-group tag="ul" class="todo-list" name="fade">
+      <li
+        v-for="(todo, index) in filteredTodos"
+        :key="todo.id"
+        :class="{ done: todo.done }"
+        draggable="true"
+        @dragstart="startDrag(index)"
+        @dragover.prevent
+        @drop="dropTodo(index)"
+      >
+        <div class="text">
+          <span v-if="!todo.editing" @dblclick="editTodo(todo)">
+            {{ todo.text }}
+          </span>
+          <input
+            v-else
+            v-model="todo.text"
+            @keyup.enter="doneEditing(todo)"
+            @blur="doneEditing(todo)"
+          />
+          <small class="timestamp">{{ formatTime(todo.time) }}</small>
+        </div>
+
+        <div class="actions">
+          <button @click="toggleTodo(index)">✔</button>
+          <button @click="removeTodo(index)">✖</button>
+        </div>
+      </li>
+    </transition-group>
   </div>
 </template>
 
@@ -55,6 +58,7 @@ export default {
       todos: [],
       filter: 'all',
       darkMode: false,
+      draggedIndex: null,
     };
   },
   computed: {
@@ -66,10 +70,15 @@ export default {
   },
   methods: {
     addTodo() {
-      if (this.newTodo.trim()) {
-        this.todos.push({ text: this.newTodo.trim(), done: false });
-        this.newTodo = '';
-      }
+      if (!this.newTodo.trim()) return;
+      this.todos.push({
+        id: Date.now(),
+        text: this.newTodo.trim(),
+        done: false,
+        editing: false,
+        time: new Date(),
+      });
+      this.newTodo = '';
     },
     toggleTodo(index) {
       this.todos[index].done = !this.todos[index].done;
@@ -77,126 +86,145 @@ export default {
     removeTodo(index) {
       this.todos.splice(index, 1);
     },
+    editTodo(todo) {
+      todo.editing = true;
+      this.$nextTick(() => {
+        const inputs = this.$el.querySelectorAll('input');
+        inputs.forEach(input => input.focus());
+      });
+    },
+    doneEditing(todo) {
+      todo.editing = false;
+    },
+    formatTime(date) {
+      const d = new Date(date);
+      return `${d.toLocaleDateString()} ${d.toLocaleTimeString()}`;
+    },
+    startDrag(index) {
+      this.draggedIndex = index;
+    },
+    dropTodo(index) {
+      const draggedTodo = this.todos[this.draggedIndex];
+      this.todos.splice(this.draggedIndex, 1);
+      this.todos.splice(index, 0, draggedTodo);
+    },
   },
 };
 </script>
 
 <style scoped>
-/* Base styles */
-.app {
-  min-height: 100vh;
-  background: linear-gradient(to right, #d3cce3, #e9e4f0);
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  padding: 2rem;
-  transition: 0.3s ease;
-}
-
 .todo-container {
-  background-color: white;
+  max-width: 480px;
+  margin: 3rem auto;
   padding: 2rem;
-  border-radius: 15px;
-  width: 100%;
-  max-width: 450px;
-  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
-  transition: 0.3s ease;
+  border-radius: 16px;
+  background: linear-gradient(135deg, #f0f0f3, #ffffff);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1);
+  transition: background 0.3s, color 0.3s;
 }
-
-/* Header with dark toggle */
+.dark {
+  background: linear-gradient(135deg, #1e1e2f, #2e2e3e);
+  color: #f4f4f4;
+}
 .header {
   display: flex;
   justify-content: space-between;
   align-items: center;
   margin-bottom: 1rem;
 }
-h1 {
-  margin: 0;
-  color: #4a4e69;
-}
-.dark-toggle {
-  font-size: 0.9rem;
-}
-
-/* Form */
 form {
   display: flex;
-  gap: 0.5rem;
   margin-bottom: 1rem;
 }
-input[type='text'] {
+input {
   flex: 1;
-  padding: 0.6rem;
-  border: 1px solid #ccc;
+  padding: 0.6rem 0.8rem;
   border-radius: 8px;
-  font-size: 1rem;
+  border: 1px solid #ccc;
+  outline: none;
 }
-button[type='submit'] {
+button {
+  margin-left: 0.5rem;
   padding: 0.6rem 1rem;
-  background-color: #4a4e69;
+  background: #4a4e69;
   color: white;
   border: none;
   border-radius: 8px;
   cursor: pointer;
-  transition: 0.3s ease;
+  transition: 0.2s;
 }
-button[type='submit']:hover {
-  background-color: #22223b;
+button:hover {
+  background: #373a50;
 }
-
-/* Filters */
 .filters {
   display: flex;
   justify-content: space-around;
-  margin: 1rem 0;
+  margin-bottom: 1rem;
 }
 .filters button {
-  background: none;
+  background-color: #e0e0e0;
   border: none;
+  padding: 0.4rem 0.9rem;
+  border-radius: 20px;
   font-weight: bold;
+  color: #333;
   cursor: pointer;
-  color: #4a4e69;
+  transition: background 0.3s, transform 0.2s;
 }
-.filters button.active {
-  color: #22223b;
-  text-decoration: underline;
+.filters button:hover {
+  background-color: #c6c6f5;
+  transform: scale(1.05);
 }
-
-/* Todo list */
+.filters .active {
+  background-color: #4a4e69;
+  color: #fff;
+}
 .todo-list {
   list-style: none;
   padding: 0;
-  margin: 0;
 }
 .todo-list li {
-  background-color: #f4f4f4;
-  padding: 0.75rem;
-  border-radius: 8px;
-  margin-bottom: 0.5rem;
+  background: #fafafa;
+  padding: 0.8rem;
+  border-radius: 10px;
+  margin-bottom: 0.6rem;
   display: flex;
   justify-content: space-between;
   align-items: center;
-  transition: 0.3s ease;
+  transition: background 0.2s;
+}
+.dark .todo-list li {
+  background: #393b4b;
 }
 .todo-list li.done span {
   text-decoration: line-through;
-  color: gray;
+  color: #888;
 }
-
-/* Action buttons */
+.todo-list li input[type="text"] {
+  padding: 0.5rem;
+  border-radius: 6px;
+  border: 1px solid #ccc;
+  background-color: #fff;
+  outline: none;
+}
 .actions button {
-  margin-left: 0.5rem;
-  background-color: transparent;
-  color: #4a4e69;
-  font-size: 1.2rem;
+  background: none;
   border: none;
+  font-size: 1rem;
+  margin-left: 0.5rem;
   cursor: pointer;
+  color: #444;
+  transition: color 0.2s;
 }
 .actions button:hover {
-  color: #22223b;
+  color: #000;
 }
-
-/* Animations */
+.timestamp {
+  display: block;
+  font-size: 0.75rem;
+  color: #999;
+  margin-top: 4px;
+}
 .fade-enter-active,
 .fade-leave-active {
   transition: all 0.3s ease;
@@ -206,27 +234,5 @@ button[type='submit']:hover {
   opacity: 0;
   transform: translateY(10px);
 }
-
-/* Dark mode */
-.dark {
-  background: #1e1e2e;
-  color: white;
-}
-.dark .todo-container {
-  background: #2e2e3e;
-}
-.dark input,
-.dark button {
-  background-color: #444;
-  color: white;
-}
-.dark .filters button {
-  color: #ddd;
-}
-.dark .filters button.active {
-  color: white;
-}
-.dark .todo-list li {
-  background-color: #3a3a4d;
-}
 </style>
+
